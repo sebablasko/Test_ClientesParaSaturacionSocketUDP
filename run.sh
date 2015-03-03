@@ -5,6 +5,7 @@
 #	clients: número de instancias del programa cliente que se ejecutarán para saturar el servidor
 #	repetitions: cantidad de repeticiones de la prueba
 
+salida=threads_sockets_relation.csv
 
 make all
 
@@ -33,7 +34,7 @@ do
 		}
 		linea="$linea;"
 	done
-	echo "$linea" >> server_client_relation.csv
+	echo "$linea" >> $salida
 done
 
-python postProcessing.py
+python postProcessing.py $salida

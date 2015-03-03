@@ -1,7 +1,8 @@
 def promedio(l):
 	return reduce(lambda q,p: float(p)+float(q), l)/len(l)
 
-filename = "server_client_relation.csv"
+import sys
+filename = sys.argv[1]
 archivo = open(filename, 'r')
 
 finales = []
