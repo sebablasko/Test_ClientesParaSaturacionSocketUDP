@@ -37,4 +37,6 @@ do
 	echo "$linea" >> $salida
 done
 
+make clean
+
 python postProcessing.py $salida
