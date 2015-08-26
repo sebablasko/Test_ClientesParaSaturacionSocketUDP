@@ -51,9 +51,9 @@ echo "Done"
 
 MAX_PACKS=1000000
 num_port=1820
-repetitions=3
-total_num_threads_per_socket="1 2 4 8 16"
-total_clients="1 2 3 4 5 6 7"
+repetitions=50
+total_num_threads_per_socket="1 2 4 6 8 10 12 14 16 18 20 22 24 30 36 42 48 56 60"
+total_clients="1 2 3 4 5 6 7 8 9 10 11 12"
 
 echo "Iniciando Prueba..."
 salida=threads_sockets_relation.csv
