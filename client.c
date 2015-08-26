@@ -1,89 +1,140 @@
+#define _GNU_SOURCE
+
 #include <sys/time.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "../ssocket/ssocket.h"
+#include <getopt.h>
 
 //Definiciones
-#define BUF_SIZE 10
-#define MAX_PACKS 1000000
-#define PORT_NUM 1820
+#define BUF_SIZE 512
+#define FIRST_PORT 1820
 
 //Variables
-int NTHREADS = 1;
 int first_pack = 0;
 struct timeval dateInicio, dateFin;
-pthread_mutex_t lock;
 char buf[BUF_SIZE];
-char* IP_DEST;
+char* IP_DEST = "";
 int mostrarInfo = 0;
+int intensiveMode = 0;
+int MAX_PACKS = 0;
+int DESTINATION_PORT = FIRST_PORT;
 double segundos;
 
-//Metodo para hilos
-llamadaHilo(int socket_fd){
-	int lectura;
 
-	if(mostrarInfo)
-		printf("Socket Operativo: %d\n", socket_fd);
+void print_usage(){
+    printf("Uso: ./client [verbose] [intensive] --packets <num> --ip <ip-address> --port <num>\n");
+}
 
-	int i;
-	int paquetesPorEnviar = MAX_PACKS;
+void print_config(){
+    printf("Detalles de la prueba:\n");
+    printf("\tPaquetes a enviar:\t%d\n", MAX_PACKS);
+    printf("\tIP de destino:\t%s\n", IP_DEST);
+    printf("\tPuerto a enviar:\t%d\n", DESTINATION_PORT);
+    if(intensiveMode) printf("\tModo Intensivo\n") ;
+}
 
-	for(i = 0; i < paquetesPorEnviar; i++){
-		if(write(socket_fd, buf, BUF_SIZE) != BUF_SIZE) {
-			gettimeofday(&dateFin, NULL);
-			segundos = (dateFin.tv_sec+dateFin.tv_usec/1000000.)-(dateInicio.tv_sec*1.0+dateInicio.tv_usec/1000000.);
-			fprintf(stderr, "Falla el write al servidor, envio %d paquetes\n", i);
-			fprintf(stderr, "total time = %g\n", segundos);
-			break;
-		}
-		if(first_pack==0) { 
-			pthread_mutex_lock(&lock);
-			if(first_pack == 0) {
-				if(mostrarInfo) printf("got first pack\n");
-				first_pack = 1;
-				//Medir Inicio
-				gettimeofday(&dateInicio, NULL);
-			}
-			pthread_mutex_unlock(&lock);
-		}
+void parseArgs(int argc, char **argv){
+	int c;
+	int digit_optind = 0;
+
+	while (1){
+		int this_option_optind = optind ? optind : 1;
+        int option_index = 0;
+
+		static struct option long_options[] = {
+			{"packets", required_argument, 0, 'd'},
+			{"ip", required_argument, 0, 'i'},
+			{"port", required_argument, 0, 'p'},
+			{"verbose", no_argument, 0, 'v'},
+			{"intensive", no_argument, 0, 'f'},
+			{0, 0, 0, 0}
+		};
+
+         c = getopt_long (argc, argv, "vfd:i:p:",
+         long_options, &option_index);
+
+         if (c == -1)
+         	break;
+
+         switch (c){
+
+			case 'v':
+				printf ("Modo Verboso\n");
+				mostrarInfo = 1;
+				break;
+
+			case 'f':
+				printf ("Modo Intensivo\n");
+				intensiveMode = 1;
+				break;
+
+			case 'd':
+				MAX_PACKS = atoi(optarg);
+				break;
+
+			case 'i':
+				IP_DEST = optarg;
+				break;
+
+			case 'p':
+				DESTINATION_PORT = atoi(optarg);
+				break;
+
+			default:
+				printf("Error: La función getopt_long ha retornado un carácter desconocido. El carácter es = %c\n", c);
+				print_usage();
+				exit(1);
+         }
 	}
 }
 
-main(int argc, char **argv) {
+int main(int argc, char **argv) {
 
-	if(argc < 2){
-		fprintf(stderr, "Syntax Error: Esperado: ./client IP_DEST\n");
+	// Paso 1.- Parsear Argumentos
+	parseArgs(argc, argv);
+
+	// Paso 2.- Validar Argumentos
+	if(MAX_PACKS < 1 || strlen(IP_DEST)==0) {
+		printf("Error en el ingreso de parametros\n");
+		print_usage();
 		exit(1);
 	}
 
-	IP_DEST = argv[1];
+	if(mostrarInfo)	print_config();
 
-	//Variables
-	int socket_fd;
-	pthread_t pids;
-	char port_number[10];
+	// Paso 3.- Llenar Buffer con datos para mandar
 	int i;
+	for(i = 0; i < BUF_SIZE; i++)
+		buf[i] = 'p'+i;
 
-	/* Llenar de datos el buffer a enviar */
-	for(i=0; i < BUF_SIZE; i++)
-		buf[i] = 'a'+i;
-
-	if(mostrarInfo)	printf("Puertos Activados: \n");
-	sprintf(port_number, "%d", PORT_NUM);
-	if(mostrarInfo)	printf("\t\t %s\n ", port_number);
-	socket_fd = udp_connect(IP_DEST, port_number);
+	// Paso 4.- Crear Socket
+	int socket_fd;
+	char ports[10];
+	sprintf(ports, "%d", DESTINATION_PORT);
+	socket_fd = udp_connect(IP_DEST, ports);
 	if(socket_fd < 0) {
 		fprintf(stderr, "connection refused\n");
 		exit(1);
 	}
+	//Medir Inicio
+	gettimeofday(&dateInicio, NULL);
 
-	pthread_mutex_init(&lock, NULL);
-
-	//Lanzar Threads
-	pthread_create(&pids, NULL, llamadaHilo, socket_fd);
-
-	//Esperar Threads
-	pthread_join(pids, NULL);
+	// Paso 4.1.- Escribir en el socket
+	for(i = 0; i < MAX_PACKS; i++){
+		if(intensiveMode){
+			write(socket_fd, buf, BUF_SIZE);
+		}else{
+			if(write(socket_fd, buf, BUF_SIZE) != BUF_SIZE) {
+			gettimeofday(&dateFin, NULL);
+			segundos = (dateFin.tv_sec+dateFin.tv_usec/1000000.)-(dateInicio.tv_sec*1.0+dateInicio.tv_usec/1000000.);
+			//fprintf(stderr, "Falla el write al servidor, envio %d paquetes\n", i);
+			//fprintf(stderr, "total time = %g\n", segundos);
+			break;
+		}
+		}
+	}
 
 	//Medir Fin
 	gettimeofday(&dateFin, NULL);
@@ -96,4 +147,5 @@ main(int argc, char **argv) {
 		printf("%g \n", segundos);
 	}
 	exit(0);
+	return 0;
 }
